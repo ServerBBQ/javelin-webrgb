@@ -1,0 +1,350 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Kyria Screen Sampling</title>
+  <style>
+    body {
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      height: 100vh;
+      margin: 0;
+      background-color: #f0f0f0;
+    }
+    #container {
+      position: relative;
+      width: 800px; /* Adjusted size */
+      height: 500px; /* Adjusted size */
+    }
+    .pixel {
+      position: absolute;
+      width: 20px; /* Adjusted pixel size */
+      height: 20px; /* Adjusted pixel size */
+      background-color: #3498db;
+      border-radius: 50%; /* Makes the pixels circular */
+      transform-origin: center;
+    }
+    #controls {
+      position: absolute;
+      bottom: 20px;
+      left: 50%;
+      transform: translateX(-50%);
+      display: flex;
+      gap: 10px;
+    }
+    button, input {
+      padding: 5px 10px;
+      font-size: 16px;
+    }
+    #fps {
+      position: absolute;
+      top:0;
+      left:0;
+    }
+  </style>
+</head>
+<body>
+<div id="container"></div>
+<span id=fps></span>
+<div id="controls">
+  <label>
+    Saturation: 
+    <input id="saturation" type="range" min="0" max="200" value="100">
+    <input id="saturationValue" type="number" min="0" max="200" value="100"> %
+  </label>
+  <label>
+    Blur: 
+    <input id="blur" type="range" min="0" max="500" value="50">
+    <input id="blurValue" type="number" min="0" max="500" value="50"> px
+  </label>
+  <label>
+    Brightness: 
+    <input id="brightness" type="range" min="1" max="100" value="30">
+    <input id="brightnessValue" type="number" min="1" max="100" value="30"> %
+  </label>
+  <button id="startScreenShare">Start Screen Share</button>
+  <button id="connect">Connect Device</button>
+</div>
+
+
+
+<script>
+  var layout = [
+    {"x": 0, "y": 0}, {"x": 1, "y": 0}, {"x": 2, "y": 0}, {"x": 3, "y": 0}, {"x": 4, "y": 0}, {"x": 5, "y": 0}, {"x": 6, "y": 0}, {"x": 7, "y": 0}, {"x": 8, "y": 0}, {"x": 9, "y": 0}, {"x": 10, "y": 0}, {"x": 11, "y": 0},
+    {"x": 0, "y": 1}, {"x": 1, "y": 1}, {"x": 2, "y": 1}, {"x": 3, "y": 1}, {"x": 4, "y": 1}, {"x": 5, "y": 1}, {"x": 6, "y": 1}, {"x": 7, "y": 1}, {"x": 8, "y": 1}, {"x": 9, "y": 1}, {"x": 10, "y": 1}, {"x": 11, "y": 1},
+    {"x": 0, "y": 2}, {"x": 1, "y": 2}, {"x": 2, "y": 2}, {"x": 3, "y": 2}, {"x": 4, "y": 2}, {"x": 5, "y": 2}, {"x": 6, "y": 2}, {"x": 7, "y": 2}, {"x": 8, "y": 2}, {"x": 9, "y": 2}, {"x": 10, "y": 2}, {"x": 11, "y": 2},
+    {"x": 0, "y": 3}, {"x": 1, "y": 3}, {"x": 2, "y": 3}, {"x": 3, "y": 3}, {"x": 4, "y": 3}, {"x": 5, "y": 3}, {"x": 6, "y": 3}, {"x": 7, "y": 3}, {"x": 8, "y": 3}, {"x": 9, "y": 3}, {"x": 10, "y": 3}, {"x": 11, "y": 3}
+];
+
+  const container = document.getElementById("container");
+  const saturationInput = document.getElementById("saturation");
+  const blurInput = document.getElementById("blur");
+  var pixels = [];
+  const scale = 50; // Scale for pixel positioning
+  let brightness = 0.3; // Set brightness level between 0 and 1
+
+  const filters = [
+    {
+        "usagePage": 65329,
+        "usage": 116
+    }
+  ];
+  let device;
+  var enc = new TextEncoder();
+  var denc = new TextDecoder("utf8");
+  var rgbLeds = []; // The state of each rgb led
+  var rgbRefreshRate = 30; // Max rgb refresh rate
+  
+  function sleep(ms) {
+    return new Promise(resolve => setTimeout(resolve, ms));
+  }
+  
+  // Synchronize the slider with the number input
+  document.getElementById("saturation").addEventListener("input", function (event) {
+    document.getElementById("saturationValue").value = event.target.value;
+  });
+
+  document.getElementById("blur").addEventListener("input", function (event) {
+    document.getElementById("blurValue").value = event.target.value;
+  });
+
+  document.getElementById("brightness").addEventListener("input", function (event) {
+    document.getElementById("brightnessValue").value = event.target.value;
+        brightness = event.target.value/100
+  });
+
+  // Synchronize the number input with the slider on Enter key
+  document.getElementById("saturationValue").addEventListener("input", function (event) {
+    const value = parseInt(event.target.value, 10);
+    const slider = document.getElementById("saturation");
+    if (!isNaN(value) && value >= slider.min && value <= slider.max) {
+      slider.value = value;
+    } else {
+      event.target.value = slider.value; // Reset to slider value if invalid
+    }
+  });
+
+  document.getElementById("blurValue").addEventListener("input", function (event) {
+    const value = parseInt(event.target.value, 10);
+    const slider = document.getElementById("blur");
+    if (!isNaN(value) && value >= slider.min && value <= slider.max) {
+      slider.value = value;
+    } else {
+      event.target.value = slider.value; // Reset to slider value if invalid
+    }
+  });
+  
+    document.getElementById("brightnessValue").addEventListener("input", function (event) {
+    const value = parseInt(event.target.value, 10);
+    const slider = document.getElementById("brightness");
+    if (!isNaN(value) && value >= slider.min && value <= slider.max) {
+      slider.value = value;
+    } else {
+      event.target.value = slider.value; // Reset to slider value if invalid
+    }
+    brightness = slider.value/100
+  });
+
+
+  
+  // Create pixels
+  function updateLayout(){
+    pixels = []
+    container.innerHTML = "";
+    layout.forEach(({x, y}) => {
+      const pixel = document.createElement("div");
+      pixel.className = "pixel";
+      pixel.style.left = `${x * scale}px`;
+      pixel.style.top = `${y * scale}px`;
+      container.appendChild(pixel);
+      pixels.push({ element: pixel, x, y });
+    });
+  }
+  updateLayout();
+
+  // RGB to HSL conversion
+  function rgbToHsl(r, g, b) {
+    r /= 255; g /= 255; b /= 255;
+    const max = Math.max(r, g, b), min = Math.min(r, g, b);
+    let h, s, l = (max + min) / 2;
+
+    if (max === min) {
+      h = s = 0; // achromatic
+    } else {
+      const d = max - min;
+      s = l > 0.5 ? d / (2 - max - min) : d / (max + min);
+      switch (max) {
+        case r: h = (g - b) / d + (g < b ? 6 : 0); break;
+        case g: h = (b - r) / d + 2; break;
+        case b: h = (r - g) / d + 4; break;
+      }
+      h /= 6;
+    }
+
+    return [h * 360, s, l];
+  }
+
+  // HSL to RGB conversion
+  function hslToRgb(h, s, l) {
+    let r, g, b;
+    h /= 360;
+
+    if (s === 0) {
+      r = g = b = l; // achromatic
+    } else {
+      const hue2rgb = (p, q, t) => {
+        if (t < 0) t += 1;
+        if (t > 1) t -= 1;
+        if (t < 1 / 6) return p + (q - p) * 6 * t;
+        if (t < 1 / 2) return q;
+        if (t < 2 / 3) return p + (q - p) * (2 / 3 - t) * 6;
+        return p;
+      };
+
+      const q = l < 0.5 ? l * (1 + s) : l + s - l * s;
+      const p = 2 * l - q;
+      r = hue2rgb(p, q, h + 1 / 3);
+      g = hue2rgb(p, q, h);
+      b = hue2rgb(p, q, h - 1 / 3);
+    }
+
+    return [Math.round(r * 255), Math.round(g * 255), Math.round(b * 255)];
+  }
+
+  // Start screen sharing
+  document.getElementById("startScreenShare").addEventListener("click", async () => {
+    try {
+      const stream = await navigator.mediaDevices.getDisplayMedia({ video: { frameRate: { max: 60 } } });
+      const video = document.createElement("video");
+      video.srcObject = stream;
+      video.play();
+
+      const canvas = document.createElement("canvas");
+      const ctx = canvas.getContext("2d");
+
+      video.addEventListener("loadedmetadata", () => {
+        canvas.width = video.videoWidth;
+        canvas.height = video.videoHeight;
+
+        function sampleColors() {
+          // Apply blur effect
+          ctx.filter = `blur(${blurInput.value}px)`;
+          ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+          let i = 0;
+          rgbLeds = []
+          pixels.forEach(({ element, x, y }) => {
+            const sampleX = Math.floor((x / 18) * canvas.width);
+            const sampleY = Math.floor((y / 5) * canvas.height);
+            const [r, g, b] = ctx.getImageData(sampleX, sampleY, 1, 1).data;
+
+            // Saturate the colors
+            let [h, s, l] = rgbToHsl(r, g, b);
+            s *= saturationInput.value / 100; // Adjust saturation
+            s = Math.min(s, 1)
+            const [sr, sg, sb] = hslToRgb(h, s, l);
+
+            element.style.backgroundColor = `rgb(${sr},${sg},${sb})`;
+            
+            // scale for keyboard rgb
+            scaledR = Math.round(sr * brightness);
+            scaledG = Math.round(sg * brightness);
+            scaledB = Math.round(sb * brightness);
+            rgbLeds[i] = [scaledR, scaledG, scaledB]
+            i ++
+          });
+
+          requestAnimationFrame(sampleColors);
+        }
+
+        sampleColors();
+      });
+    } catch (err) {
+      console.error("Screen sharing error:", err);
+    }
+  });
+  
+  let ready = false;
+  document.getElementById("connect").addEventListener("click", async () => {
+    if (!device) {
+      [device] = await navigator.hid.requestDevice({ filters }); // Get javelin device
+      await device.open();
+    }
+    // Define the callback function separately
+    let unparsedLayout = ""
+    function getLayout(event) {
+        const { data, device, reportId } = event;
+        console.log(data, device, reportId, event);
+        // Add to unparsed layout without null bytes
+        unparsedLayout = unparsedLayout + denc.decode(data).replace(/\u0000/g, "");
+        if (unparsedLayout.slice(-2) === "\n\n") {
+          unparsedLayout = unparsedLayout.slice(0, -2); // remove newlines
+          console.log(unparsedLayout);
+          try {
+            layout = JSON.parse(unparsedLayout).layout;
+          } catch(e) {
+            console.error(e);
+            unparsedLayout = "";
+            return;
+          }
+          console.log("Layout recieved!")
+          updateLayout();
+          device.removeEventListener("inputreport", getLayout);
+        }
+        
+        // Later, you can remove it like this:
+        //device.removeEventListener("inputreport", getLayout);
+    }
+
+    // Add the event listener
+    device.addEventListener("inputreport", getLayout);
+    
+    //get layout
+    device.sendReport(0, enc.encode(`\nget_parameter script_configuration`))
+    
+    document.getElementById("connect").textContent="Reload layout";
+    
+    if (ready == true) {return}
+    ready = true;
+    
+    await sleep(5000);
+    let lastTime = Date.now();
+    let isRunning = false;
+    let frameCount = 0;
+    let fps = 0;
+    setInterval(async () => {
+      if (isRunning) {  // Prevent the loop from running if it's already running
+        return
+      };
+      const currentTime = Date.now();
+      frameCount++;
+
+      isRunning = true; // Mark that the loop is running
+
+      // Create an array of promises for each LED update
+      const promises = rgbLeds.map(async (led, i) => {
+        let [r, g, b] = led; // Destructure RGB values
+        await device.sendReport(0, enc.encode(`\nset_rgb ${i} ${r} ${g} ${b}`));
+      });
+
+      // Calculate FPS once every second
+      if (currentTime - lastTime >= 1000) {
+        fps = frameCount;
+        frameCount = 0; // Reset the frame count
+        lastTime = currentTime; // Update the last time
+        document.getElementById("fps").textContent = `FPS: ${fps}`
+        console.log(`FPS: ${fps}`);
+      }
+ 
+      // Wait for all promises to complete before continuing the next loop
+      await Promise.all(promises);
+      
+      isRunning = false; // Mark that the loop has finished
+    }, 1000 / rgbRefreshRate);
+  });
+</script>
+
+</body>
+</html>
