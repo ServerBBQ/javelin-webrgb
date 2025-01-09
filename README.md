@@ -2,10 +2,10 @@ A lowish effort project that uses the rgb with javelin and colors it based on th
 
 How to use:
 
-disable all rgb on the keyboard(or it will flicker)
-press connect device and connect the device
-press reload layout until the layout shows correctly
-start screen share
+1. disable all rgb on the keyboard(or it will flicker)
+2. press connect device and connect the device
+3. press reload layout until the layout shows correctly
+4. start screen share
 
 done!
 
