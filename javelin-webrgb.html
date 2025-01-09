@@ -69,7 +69,7 @@
 </div>
 
 
-
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pako/2.1.0/pako.min.js"></script>
 <script>
   var layout = [
     {"x": 0, "y": 0}, {"x": 1, "y": 0}, {"x": 2, "y": 0}, {"x": 3, "y": 0}, {"x": 4, "y": 0}, {"x": 5, "y": 0}, {"x": 6, "y": 0}, {"x": 7, "y": 0}, {"x": 8, "y": 0}, {"x": 9, "y": 0}, {"x": 10, "y": 0}, {"x": 11, "y": 0},
@@ -147,7 +147,35 @@
     brightness = slider.value/100
   });
 
+  // Helper function to check if the string is valid base64
+function isBase64(str) {
+  const base64Regex = /^(?:[A-Za-z0-9+/=]|\s)*$/;
+  return base64Regex.test(str) && (str.length % 4 === 0);
+}
 
+// Decompress bzip2 using pako library (you can use pako.min.js for a smaller version)
+function decompressBzip2(base64Str) {
+  if (!isBase64(base64Str)) {
+    throw new Error("The string is not valid base64.");
+  }
+
+  // Decode base64 to binary string
+  const decodedStr = atob(base64Str);
+
+  // Convert binary string to Uint8Array
+  const byteArray = new Uint8Array(decodedStr.length);
+  for (let i = 0; i < decodedStr.length; i++) {
+    byteArray[i] = decodedStr.charCodeAt(i);
+  }
+
+  // Decompress using pako (assuming the library is loaded)
+  try {
+    const decompressed = pako.bzip2.inflate(byteArray, { to: 'string' });
+    return decompressed;
+  } catch (error) {
+    throw new Error("Failed to decompress: " + error.message);
+  }
+}
   
   // Create pixels
   function updateLayout(){
@@ -281,8 +309,12 @@
         unparsedLayout = unparsedLayout + denc.decode(data).replace(/\u0000/g, "");
         if (unparsedLayout.slice(-2) === "\n\n") {
           unparsedLayout = unparsedLayout.slice(0, -2); // remove newlines
+
           console.log(unparsedLayout);
           try {
+            if (isBase64(unparsedLayout)){
+              unparsedLayout = decompressBzip2(unparsedLayout)
+            }
             layout = JSON.parse(unparsedLayout).layout;
           } catch(e) {
             console.error(e);
