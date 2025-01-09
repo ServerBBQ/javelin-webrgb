@@ -69,7 +69,7 @@
 </div>
 
 
-<script src="https://cdnjs.cloudflare.com/ajax/libs/pako/2.1.0/pako.min.js"></script>
+<script src="https://cdn.jsdelivr.net/gh/kirilloid/bzip2-js@a4a43a87ab54138cab186502b1dba7d7d2c24142/bzip2.js"></script>
 <script>
   var layout = [
     {"x": 0, "y": 0}, {"x": 1, "y": 0}, {"x": 2, "y": 0}, {"x": 3, "y": 0}, {"x": 4, "y": 0}, {"x": 5, "y": 0}, {"x": 6, "y": 0}, {"x": 7, "y": 0}, {"x": 8, "y": 0}, {"x": 9, "y": 0}, {"x": 10, "y": 0}, {"x": 11, "y": 0},
@@ -162,15 +162,8 @@ function decompressBzip2(base64Str) {
   // Decode base64 to binary string
   const decodedStr = atob(base64Str);
 
-  // Convert binary string to Uint8Array
-  const byteArray = new Uint8Array(decodedStr.length);
-  for (let i = 0; i < decodedStr.length; i++) {
-    byteArray[i] = decodedStr.charCodeAt(i);
-  }
-
-  // Decompress using pako (assuming the library is loaded)
   try {
-    const decompressed = pako.bzip2.inflate(byteArray, { to: 'string' });
+    const decompressed = ArchUtils.bz2.decode(decodedStr);
     return decompressed;
   } catch (error) {
     throw new Error("Failed to decompress: " + error.message);
