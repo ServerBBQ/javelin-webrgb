@@ -64,6 +64,11 @@
     <input id="brightness" type="range" min="1" max="100" value="30">
     <input id="brightnessValue" type="number" min="1" max="100" value="30"> %
   </label>
+    <label>
+    Increase fps<br>
+    (Firmware newer than Jan 11th 25): 
+    <input id="increaseFps" type="checkbox" checked>
+  </label>
   <button id="startScreenShare">Start Screen Share</button>
   <button id="connect">Connect Device</button>
 </div>
@@ -95,7 +100,7 @@
   var enc = new TextEncoder();
   var denc = new TextDecoder("utf8");
   var rgbLeds = []; // The state of each rgb led
-  var rgbRefreshRate = 30; // Max rgb refresh rate
+  var rgbRefreshRate = 60; // Max rgb refresh rate
   
   function sleep(ms) {
     return new Promise(resolve => setTimeout(resolve, ms));
@@ -234,6 +239,16 @@ function decompressBzip2(base64Str) {
     return [Math.round(r * 255), Math.round(g * 255), Math.round(b * 255)];
   }
 
+  function padUint8Array(inputArray) {
+    const targetLength = 64;
+    const paddedArray = new Uint8Array(targetLength);
+
+    // Copy the input array into the padded array
+    paddedArray.set(inputArray);
+
+    return paddedArray;
+  }
+
   // Start screen sharing
   document.getElementById("startScreenShare").addEventListener("click", async () => {
     try {
@@ -334,25 +349,45 @@ function decompressBzip2(base64Str) {
     if (ready == true) {return}
     ready = true;
     
+    var increaseFpsCheckbox = document.getElementById("increaseFps");
+    
     await sleep(5000);
     let lastTime = Date.now();
-    let isRunning = false;
+    let isRunning = 0;
     let frameCount = 0;
     let fps = 0;
     setInterval(async () => {
-      if (isRunning) {  // Prevent the loop from running if it's already running
+      if (isRunning >= 3) {  // Only run the loop when it is running less than 2 times
         return
       };
       const currentTime = Date.now();
       frameCount++;
 
-      isRunning = true; // Mark that the loop is running
+      isRunning++; // Mark that the loop is running
 
-      // Create an array of promises for each LED update
-      const promises = rgbLeds.map(async (led, i) => {
-        let [r, g, b] = led; // Destructure RGB values
-        await device.sendReport(0, enc.encode(`set_rgb ${i} ${r} ${g} ${b}\n`));
-      });
+      let promises = []
+      if (increaseFpsCheckbox.checked) {
+        // Create a combined single line for each LED update
+        let consoleCommand = "";
+        rgbLeds.map(async (led, i) => {
+          let [r, g, b] = led; // Destructure RGB values
+          consoleCommand += `set_rgb ${i} ${r} ${g} ${b}\n`
+          //await device.sendReport(0, enc.encode(`set_rgb ${i} ${r} ${g} ${b}\n`));
+        });
+
+        for (let i = 0; i < consoleCommand.length; i += 64) {
+          let slicedconsoleCommand = consoleCommand.slice(i, i+64);
+          console.log(slicedconsoleCommand, "newline checker")
+          const promise = device.sendReport(0, enc.encode(slicedconsoleCommand));
+          promises.push(promise);
+        }
+      } else {
+        promises = rgbLeds.map(async (led, i) => {
+          let [r, g, b] = led; // Destructure RGB values
+          await device.sendReport(0, enc.encode(`set_rgb ${i} ${r} ${g} ${b}\n`));
+        });
+      }
+
 
       // Calculate FPS once every second
       if (currentTime - lastTime >= 1000) {
@@ -366,7 +401,7 @@ function decompressBzip2(base64Str) {
       // Wait for all promises to complete before continuing the next loop
       await Promise.all(promises);
       
-      isRunning = false; // Mark that the loop has finished
+      isRunning--; // Mark that the loop has finished
     }, 1000 / rgbRefreshRate);
   });
 </script>
